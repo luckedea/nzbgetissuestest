@@ -65,10 +65,14 @@ NZBGet absolutely needs the following libraries:
  - [Boost.JSON](https://www.boost.org/doc/libs/1_84_0/libs/json/doc/html/index.html)
  - [Boost.Optional](https://www.boost.org/doc/libs/1_84_0/libs/optional/doc/html/index.html)
 
+  For configuration:
+   - [autotools](https://www.gnu.org/software/automake/manual/html_node/Autotools-Introduction.html)
+   - [autoconf](https://www.gnu.org/software/autoconf/)
+
 And the following libraries are optional:
 
   For curses-output-mode (enabled by default):
-   - libcurses   (usually part of commercial systems)
+   - libcurses (usually part of commercial systems)
      or (better)
    - [libncurses](https://invisible-island.net/ncurses)
     
@@ -80,10 +84,6 @@ And the following libraries are optional:
 
   For gzip support in web-server and web-client (enabled by default):
    - [zlib](https://www.zlib.net/)
-
-  For configuration:
-   - [autotools](https://www.gnu.org/software/automake/manual/html_node/Autotools-Introduction.html)
-   - [autoconf](https://www.gnu.org/software/autoconf/)
 
   For managing package dependencies:
    - [pkg-config](https://www.freedesktop.org/wiki/Software/pkg-config/)
@@ -225,6 +225,7 @@ Also required are:
    - [Zlib](https://gnuwin32.sourceforge.net/packages/zlib.htm)
    - [libxml2](https://gitlab.gnome.org/GNOME/libxml2/-/wikis/home)
    - [Boost.JSON](https://www.boost.org/doc/libs/1_84_0/libs/json/doc/html/index.html)
+   - [Boost.Optional](https://www.boost.org/doc/libs/1_84_0/libs/optional/doc/html/index.html)
 
 For tests:
    - [Boost.Test](https://www.boost.org/doc/libs/1_84_0/libs/test/doc/html/index.html)
