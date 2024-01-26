@@ -239,6 +239,12 @@ public:
 	virtual void Execute();
 };
 
+class TestExtensionXmlCommand : public SafeXmlCommand
+{
+public:
+	virtual void Execute();
+};
+
 class SaveConfigXmlCommand: public XmlCommand
 {
 public:
@@ -732,6 +738,10 @@ std::unique_ptr<XmlCommand> XmlRpcProcessor::CreateCommand(const char* methodNam
 	else if (!strcasecmp(methodName, "deleteextension"))
 	{
 		command = std::make_unique<DeleteExtensionXmlCommand>();
+	}
+	else if (!strcasecmp(methodName, "testextension"))
+	{
+		command = std::make_unique<TestExtensionXmlCommand>();
 	}
 	else if (!strcasecmp(methodName, "saveconfig"))
 	{
@@ -2707,14 +2717,6 @@ void LoadConfigXmlCommand::Execute()
 
 void LoadExtensionsXmlCommand::Execute()
 {
-	Tokenizer tokDir(g_Options->GetScriptDir(), ",;");
-	const char* scriptDir = tokDir.Next();
-	if (Util::EmptyStr(scriptDir))
-	{
-		BuildErrorResponse(3, "Couldn't load extensions. \"ScriptDir\" is not specified");
-		return;
-	}
-
 	bool loadFromDisk = false;
 	bool isJson = IsJson();
 
@@ -2726,9 +2728,10 @@ void LoadExtensionsXmlCommand::Execute()
 
 	if (loadFromDisk)
 	{
-		if (!g_ExtensionManager->LoadExtensions(*g_Options))
+		const auto& error = g_ExtensionManager->LoadExtensions(*g_Options);
+		if (error)
 		{
-			BuildErrorResponse(3, "Couldn't load extensions");
+			BuildErrorResponse(3, error.get().c_str());
 			return;
 		}	
 	}
@@ -2737,11 +2740,11 @@ void LoadExtensionsXmlCommand::Execute()
 
 	int index = 0;
 
-	for (const auto& extension : g_ExtensionManager->GetExtensions())
+	for (const auto extension : g_ExtensionManager->GetExtensions())
 	{
 		std::string response = isJson
-			? Extension::ToJsonStr(extension)
-			: Extension::ToXmlStr(extension);
+			? Extension::ToJsonStr(*extension)
+			: Extension::ToXmlStr(*extension);
 
 		AppendCondResponse(",\n", isJson && index++ > 0);
 		AppendResponse(response.c_str());
@@ -2768,17 +2771,9 @@ void DownloadExtensionXmlCommand::Execute()
 	}
 	DecodeStr(infoName);
 
-	Tokenizer tokDir(g_Options->GetScriptDir(), ",;");
-	const char* scriptDir = tokDir.Next();
-	if (Util::EmptyStr(scriptDir))
+	if (Util::EmptyStr(g_Options->GetTempDir()))
 	{
-		BuildErrorResponse(3, "\"ScriptDir\" is not specified");
-		return;
-	}
-
-	if (Util::EmptyStr(g_Options->GetSevenZipCmd()))
-	{
-		BuildErrorResponse(3, "\"SevenZipCmd\" is not specified");
+		BuildErrorResponse(3, "\"TempDir\" is not specified");
 		return;
 	}
 
@@ -2787,6 +2782,14 @@ void DownloadExtensionXmlCommand::Execute()
 	if (!ok)
 	{
 		BuildErrorResponse(3, "Failed to read URL");
+		return;
+	}
+
+	Tokenizer tokDir(g_Options->GetScriptDir(), ",;");
+	const char* scriptDir = tokDir.Next();
+	if (Util::EmptyStr(scriptDir))
+	{
+		BuildErrorResponse(3, "\"ScriptDir\" is not specified");
 		return;
 	}
 
@@ -2827,18 +2830,6 @@ void UpdateExtensionXmlCommand::Execute()
 	}
 	DecodeStr(infoName);
 
-	if (Util::EmptyStr(g_Options->GetScriptDir()))
-	{
-		BuildErrorResponse(3, "\"ScriptDir\" is not specified");
-		return;
-	}
-
-	if (Util::EmptyStr(g_Options->GetSevenZipCmd()))
-	{
-		BuildErrorResponse(3, "\"SevenZipCmd\" is not specified");
-		return;
-	}
-
 	const auto result = g_ExtensionManager->DownloadExtension(url, infoName);
 	bool ok = std::get<0>(result) == WebDownloader::adFinished;
 	if (!ok)
@@ -2866,11 +2857,32 @@ void DeleteExtensionXmlCommand::Execute()
 		BuildErrorResponse(2, "Invalid parameter (Extension name)");
 		return;
 	}
+	DecodeStr(extName);
 
 	const auto error = g_ExtensionManager->DeleteExtension(extName);
 	if (error)
 	{
 		BuildErrorResponse(2, error.get().c_str());
+		return;
+	}
+
+	BuildBoolResponse(true);
+}
+
+void TestExtensionXmlCommand::Execute()
+{
+	char* extEntryFileName;
+	if (!NextParamAsStr(&extEntryFileName))
+	{
+		BuildErrorResponse(2, "Invalid parameter (Extension entry file name)");
+		return;
+	}
+	DecodeStr(extEntryFileName);
+
+	const auto found = Util::FindExecutorProgram(extEntryFileName, g_Options->GetShellOverride());
+	if (!found)
+	{
+		BuildErrorResponse(2, "Failed to find the corresponding executor");
 		return;
 	}
 

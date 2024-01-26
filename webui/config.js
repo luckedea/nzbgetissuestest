@@ -73,8 +73,7 @@ var Options = (new function($)
 
 		// build list of post-processing parameters
 		RPC.call('loadextensions', [false], function(data)
-		{	
-			ExtensionManager.setExtensions(data.slice());
+		{
 			_this.postParamConfig = initPostParamConfig(data);
 		});
 	}
@@ -138,20 +137,26 @@ var Options = (new function($)
 		// read scripts configs
 		for (var i = 1; i < this.serverTemplateData.length; i++) 
 		{
-			const section = {
+			var section = {
 				name: this.serverTemplateData[i].Name,
 				id: this.serverTemplateData[i].Name + '_' + 'OPTIONS',
 				options: [],
 				hidden: false,
 				postparam: false,
 			};
-			const scriptConfig = {
+			var scriptConfig = {
 				sections: [section],
 				nameprefix: this.serverTemplateData[i].Name,
 			};
-			const requirements = this.serverTemplateData[i].Requirements;
-			let description = arrToStr(this.serverTemplateData[i].Description) + '\n';
-			description = requirements.reduce((acc, curr) => acc += 'NOTE: ' + curr + '\n', description);
+			var requirements = this.serverTemplateData[i].Requirements;
+			var description = arrToStr(this.serverTemplateData[i].Description) + '\n';
+			description = requirements.reduce(function(acc, curr) {
+				if (curr)
+				{
+					return acc += 'NOTE: ' + curr + '\n';
+				}
+				return acc += '\n';
+			}, description);
 			scriptConfig['scriptName'] = this.serverTemplateData[i].Name;
 			scriptConfig['id'] = Util.makeId(this.serverTemplateData[i].Name);
 			scriptConfig['name'] = this.serverTemplateData[i].Name;
@@ -168,9 +173,9 @@ var Options = (new function($)
 			scriptConfig['license'] = this.serverTemplateData[i].License;
 			scriptConfig['version'] = this.serverTemplateData[i].Version;
 
-			for (let j = 0; j < this.serverTemplateData[i].Commands.length; j++) 
+			for (var j = 0; j < this.serverTemplateData[i].Commands.length; j++) 
 			{
-				const command = this.serverTemplateData[i].Commands[j];
+				var command = this.serverTemplateData[i].Commands[j];
 				section.options.push({
 					caption: command.DisplayName,
 					name: this.serverTemplateData[i].Name + ':' + command.Name,
@@ -186,10 +191,10 @@ var Options = (new function($)
 					type: 'command'
 				});
 			}
-			for (let j = 0; j < this.serverTemplateData[i].Options.length; j++) 
+			for (var j = 0; j < this.serverTemplateData[i].Options.length; j++) 
 			{
-				const option = this.serverTemplateData[i].Options[j];
-				const [type, select] = GetTypeAndSelect(option);
+				var option = this.serverTemplateData[i].Options[j];
+				var [type, select] = GetTypeAndSelect(option);
 				section.options.push({
 					caption: option.DisplayName,
 					name: this.serverTemplateData[i].Name + ':' + option.Name,
@@ -220,7 +225,7 @@ var Options = (new function($)
 
 	this.loadExtensions = function()
 	{
-		RPC.call('loadextensions', [true], extensionsLoaded, () => Options.complete());
+		RPC.call('loadextensions', [true], extensionsLoaded, function() { Options.complete(); });
 	}
 
 	function serverTemplateLoaded(data)
@@ -231,14 +236,14 @@ var Options = (new function($)
 
 	function extensionsLoaded(data)
 	{
-		ExtensionManager.setExtensions(data.slice());
 		Options.serverTemplateData = Options.serverTemplateData.concat(data);
 		Options.complete();
+		ExtensionManager.setExtensions(data.slice());
 	}
 
 	function arrToStr(arr)
 	{
-		return arr.reduce((acc, curr) => acc += curr + '\n', '');
+		return arr.reduce(function(acc, curr) { return acc += curr + '\n'; }, '');
 	}
 
 	function GetTypeAndSelect(option)
@@ -286,7 +291,7 @@ var Options = (new function($)
 	{
 		loadComplete = _complete;
 		serverValues = _serverValues;
-		complete();
+		Options.complete();
 	}
 
 	/*** PARSE CONFIG AND BUILD INTERNAL STRUCTURES **********************************************/
@@ -641,7 +646,7 @@ var Config = (new function($)
 			complete: Config.buildPage,
 			configError: Config.loadConfigError,
 			serverTemplateError: Config.loadServerTemplateError
-			});
+		});
 	}
 
 	this.hide = function()
@@ -927,12 +932,12 @@ var Config = (new function($)
 			option.type = 'text';
 			html += '<input type="text" id="' + option.formId + '" value="' + Util.textToAttr(value) + '" class="editlarge">';
 		}
-		let about = option['about'] || '';
+		var about = option['about'] || '';
 		if (about)
 		{
 			about = about.replace('\n', ' ') + '\n';
 		}
-		let description = about + (option['description'] || '\n');
+		var description = about + (option['description'] || '\n');
 		if (description) 
 		{
 			var htmldescr = description;
@@ -1047,11 +1052,19 @@ var Config = (new function($)
 		$ConfigNav.children().not('.config-static').remove();
 		$ConfigData.children().not('.config-static').remove();
 
+		var inExtensioMangerSection = false;
+
 		for (var k=0; k < config.length; k++)
 		{
-			if (k == 1 || k == 2)
+			if (k == 1)
 			{
 				$ConfigNav.append('<li class="divider"></li>');
+			}
+			if (k == 2)
+			{
+				$ConfigNav.append('<li class="divider"></li>');
+				$ConfigNav.append('<li><a href="#' + ExtensionManager.id + '">' + 'EXTENSION MANAGER' + '</a></li>');
+				inExtensioMangerSection = true;
 			}
 			var conf = config[k];
 			var added = false;
@@ -1061,6 +1074,10 @@ var Config = (new function($)
 				if (!section.hidden)
 				{
 					var html = $('<li><a href="#' + section.id + '">' + section.name + '</a></li>');
+					if (inExtensioMangerSection)
+					{
+						html.addClass('list-item--nested');
+					}
 					$ConfigNav.append(html);
 					var content = buildOptionsContent(section, k > 1);
 					$ConfigData.append(content);
@@ -1087,9 +1104,6 @@ var Config = (new function($)
 		{
 			filterInput(filterText);
 		}
-
-		$ConfigNav.append('<li class="divider"></li>');
-		$ConfigNav.append('<li><a href="#' + ExtensionManager.id + '">' + 'EXTENSION MANAGER' + '</a></li>')
 
 		$('#ConfigLoadInfo').hide();
 		$ConfigContent.show();
@@ -1885,13 +1899,14 @@ var Config = (new function($)
 
 	function addSavedSettingsOfDeletedExtensions(request)
 	{
-		config.values.forEach((val) =>
+		config.values.forEach(function(val)
 		{
-			const extName = val.Name.split(":")[0];
-			const alreadyExist = request.find((opt) => opt.Name === val.Name);
-			if (!alreadyExist && ExtensionManager.getRemoteExtensions()[extName])
+			var extName = val.Name.split(":")[0];
+			var alreadyExists = request.map(function(opt) { return opt.Name; }).indexOf(val.Name) != -1;
+			var remoteExtExists = ExtensionManager.getRemoteExtensions().map(function(ext) { return ext.name; }).indexOf(extName) != -1;
+			if (!alreadyExists && remoteExtExists)
 			{
-				const extraOpt = { Name: val.Name, Value: val.Value };
+				var extraOpt = { Name: val.Name, Value: val.Value };
 				request.push(extraOpt);
 			}
 		});
@@ -2160,7 +2175,7 @@ var Config = (new function($)
 
 	this.applyReloadedValues = function(values)
 	{
-		Options.reloadConfig(values, buildPage);
+		Options.reloadConfig(values, Config.buildPage);
 		restored = true;
 	}
 
@@ -3229,21 +3244,19 @@ var ExecScriptDialog = (new function($)
 
 function Extension()
 {
+	this.id = '';
 	this.name = '';
+	this.entry = '';
 	this.displayName = '', 
 	this.version = '';
 	this.author = '';
 	this.homepage = '';
 	this.about = '';
 	this.url = '';
+	this.testError = '';
+	this.isActive = false;
 	this.installed = false;
 	this.outdated = false;
-	this.deleteConf = false;
-
-	this.deleteConfToggle = function()
-	{
-		this.deleteConf = !this.deleteCon;
-	}
 }
 
 var ExtensionManager = (new function($)
@@ -3255,8 +3268,11 @@ var ExtensionManager = (new function($)
 	this.tbody = 'ExtensionManagerTBody';
 	this.extensionsUrl = 'https://raw.githubusercontent.com/nzbgetcom/nzbget-extensions/main/extensions.json';
 
-	let extensions = {};
-	let remoteExtensions = {};
+	var scriptOrderId = "ScriptOrder";
+	var extensionsId = "Extensions";
+	
+	var installedExtensions = [];
+	var remoteExtensions = [];
 
 	this.getRemoteExtensions = function()
 	{
@@ -3265,10 +3281,13 @@ var ExtensionManager = (new function($)
 
 	this.setExtensions = function(exts)
 	{
-		extensions = {};
-		exts.forEach((ext) => 
+		var value = Config.findOptionByName(extensionsId).value;
+		var activeExtensions = splitString(value);
+		installedExtensions = exts.map(function(ext) 
 		{
-			const extension = new Extension();
+			var extension = new Extension();
+			extension.id = ext.Name + "_OPTIONS";
+			extension.entry = ext.Entry;
 			extension.displayName = ext.DisplayName;
 			extension.version = ext.Version;
 			extension.author = ext.Author;
@@ -3276,22 +3295,23 @@ var ExtensionManager = (new function($)
 			extension.about = ext.About;
 			extension.name = ext.Name;
 			extension.installed = true;
-			extension.deleteConf = false;
-			extensions[extension.name] = extension;
+			extension.isActive = activeExtensions.indexOf(ext.Name) != -1;
+			return extension;
 		});
+		sortExtensions();
 	}
 
 	this.downloadRemoteExtensions = function()
 	{
 		showLoadingBanner();
-		this.showSection();
-		RPC.call('readurl', [this.extensionsUrl, 'Download list of available extensions.'],
-			(data) =>
+		showSection();
+		RPC.call('readurl', [this.extensionsUrl, 'Fetch list of available extensions.'],
+			function(data)
 			{
-				remoteExtensions = {};
-				JSON.parse(data).forEach((ext) => 
+				remoteExtensions = JSON.parse(data).map(function(ext) 
 				{
-					const extension = new Extension();
+					var extension = new Extension();
+					extension.id = ext.name + "_OPTIONS";
 					extension.displayName = ext.displayName;
 					extension.version = ext.version;
 					extension.author = ext.author;
@@ -3300,45 +3320,39 @@ var ExtensionManager = (new function($)
 					extension.name = ext.name;
 					extension.url = ext.url;
 					extension.installed = false;
-					extension.deleteConf = false;
-					remoteExtensions[extension.name] = extension;
+					return extension;
 				});
 				removeLoadingBanner();
-				this.hideSection();
-				this.render(this.getAllExtensions());
+				showHelpBlock();
+				hideSection();
+				render(getAllExtensions());
 			},
-			(error) => 
+			function(error) 
 			{
 				hideLoadingBanner();
-				showErrorBanner("Couldn't download extensions", error);
+				showErrorBanner("Failed to download extensions", error);
 			}
 		);
 	}
 
-	this.update = function()
+	function render(extensions)
 	{
-		this.render(this.getAllExtensions());
-	}
-
-	this.render = function()
-	{
-		const allExtensions = this.getAllExtensions();
-		const section = $('.' + this.id);
-		const table = $('#' + this.table);
-		const tbody = $('#' + this.tbody);
+		var section = $('.' + ExtensionManager.id);
+		var table = $('#' + ExtensionManager.table);
+		var tbody = $('#' + ExtensionManager.tbody);
 		tbody.empty();
 
-		allExtensions.forEach((ext, i) => {
-			const actionBtnsTd = $('<td class="extension-manager__td"></td>');
-			const actionBtns = getActionBtns(ext);
-			actionBtnsTd.append(actionBtns);
-			const raw = $('<tr></tr>')
-				.append('<td class="extension-manager__td text-center">' + ext.displayName + '</td>')
-				.append('<td class="extension-manager__td">' + ext.about + '</td>')
-				.append('<td class="extension-manager__td text-center">' + ext.version + '</td>')
-				.append('<td class="extension-manager__td text-center">' + '<a href="' + ext.homepage + '" target="_blank"><img src="img/house-16.ico"></a>' + '</td>')
-				.append(actionBtnsTd);
-
+		var firstIntalledIdx = extensions.findIndex(function(ext) { return ext.installed; });
+		var lastInstalledIdx = extensions.length - 1;
+		extensions.forEach(function(ext, i) {
+			var raw = $('<tr></tr>')
+				.append(getExtActiveStatusCell(ext))
+				.append(getCeneteredTextCell(ext.displayName))
+				.append(getTextCell(ext.about))
+				.append(getCeneteredTextCell(ext.version))
+				.append(getHomepageCell(ext))
+				.append(getActionBtnsCell(ext))
+				.append(getSortExtensionsBtnsCell(ext, i === firstIntalledIdx, i === lastInstalledIdx));
 			tbody.append(raw);
 		});
 		table.append(tbody);
@@ -3346,46 +3360,39 @@ var ExtensionManager = (new function($)
 		section.show();
 	}
 
-	this.getAllExtensions = function()
+	function getAllExtensions()
 	{
-		const allExtensions = [];
-		for (const extension of Object.values(remoteExtensions)) 
-		{
-			if (extensions[extension.name])
+		var remote = [];
+		for (var i = 0; i < remoteExtensions.length; i++) {
+			var extension = remoteExtensions[i];
+			var idx = installedExtensions.map(function(ext) { return ext.name; }).indexOf(extension.name);
+			if (idx == -1)
 			{
-				if (extensions[extension.name].version !== extension.version)
-				{
-					extensions[extension.name].outdated = true;
-				}
-				extensions[extension.name].url = extension.url;
-				allExtensions.push(extensions[extension.name]);
+				remote.push(extension);
 			}
 			else
 			{
-				allExtensions.push(extension);
+				var installedExt = installedExtensions[idx];
+				if (installedExt.version !== extension.version)
+				{
+					installedExt.outdated = true;
+				}
+				installedExt.url = extension.url;
 			}
 		}
 
-		for (const extension of Object.values(extensions)) 
-		{
-			if (!remoteExtensions[extension.name])
-			{
-				allExtensions.push(extension);
-			}
-		}
-		allExtensions.sort((a, b) => (a.installed - b.installed));
-		return allExtensions;
+		return remote.concat(installedExtensions);
 	}
 
-	this.downloadExtension = function(ext)
+	function downloadExtension(ext)
 	{
 		disableDownloadBtn(ext, true);
 		RPC.call('downloadextension', [ext.url, 'Download ' + ext.name + ' extension'], 
-			(_) => 
+			function(_) 
 			{
 				updatePage();
 			},
-			(error) =>
+			function(error)
 			{
 				disableDownloadBtn(ext, false);
 				showErrorBanner("Failed to download " + ext.name, error);
@@ -3393,72 +3400,101 @@ var ExtensionManager = (new function($)
 		);
 	}
 
-	this.updateExtension = function(ext)
+	function updateExtension(ext)
 	{
-		disableUpdateBtn(ext, true);
-		disableDeleteBtn(ext, true);
+		disableAllBtns(ext, true);
+
 		RPC.call('updateextension', [ext.url, ext.name, 'Update ' + ext.name + ' extension'], 
-			(_) => 
+			function(_) 
 			{
 				updatePage();
 			},
-			(error) =>
+			function(error)
 			{
-				disableUpdateBtn(ext, false);
-				disableDeleteBtn(ext, false);
+				disableAllBtns(ext, false);
 				showErrorBanner("Failed to update " + ext.name, error);
 			}
 		);
 	}
 
-	this.deleteExtension = function(ext)
+	function deleteExtension(ext, deleteWithSettings)
 	{
-		if (ext.deleteConf)
-		{
-			deleteSettings(ext.name);
-		}
-		deleteGlobalSettings(ext.name);
+		disableAllBtns(ext, true);
 
-		disableDeleteBtn(ext, true);
 		RPC.call('deleteextension', [ext.name], 
-			(_) => 
+			function(_) 
 			{
+				if (deleteWithSettings)
+				{
+					deleteSettings(ext.name);
+				}
+				deleteGlobalSettings(ext.name);
+
 				RPC.call('saveconfig', [Config.config().values], 
-				(_) => 
+				function(_) 
 				{
 					updatePage();
 				}),
-				(error) => 
+				function(error) 
 				{
-					disableDeleteBtn(ext, false);
+					disableAllBtns(ext, false);
 					showErrorBanner("Failed to save the config file", error);
 				}
 			},
-			(error) => 
+			function(error) 
 			{
-				disableDeleteBtn(ext, false);
+				disableAllBtns(ext, false);
 				showErrorBanner("Failed to delete " + ext.name, error);
 			}
 		);
 	}
 
-	this.showSection = function()
+	function update()
 	{
-		$('.' + this.id).show();
+		render(getAllExtensions());
 	}
 
-	this.hideSection = function()
+	function showSection()
 	{
-		$('.' + this.id).hide();
+		$('.' + ExtensionManager.id).show();
+	}
+
+	function hideSection()
+	{
+		$('.' + ExtensionManager.id).hide();
+	}
+
+	function showDeleteExtensionDropdown(ext)
+	{
+		var delBtn = $('#DeleteBtn_' + ext.name);
+		var dropdown = $('#DeleteExtensionMenu');
+		var deleteExtItem = $('#DeleteExtensionItem');
+		var deleteExtWithSettingsItem = $('#DeleteExtensionWithSettingsItem');
+		deleteExtItem.off('click').on('click', function() { deleteExtension(ext, false); });
+		deleteExtWithSettingsItem.off('click').on('click', function() { deleteExtension(ext, true); });
+		Frontend.showPopupMenu(dropdown, 'bottom-left',
+		{ 
+			left: delBtn.offset().left - 30, 
+			top: delBtn.offset().top,
+			width: delBtn.width() + 30, 
+			height: delBtn.outerHeight() - 2 
+		});
+	}
+
+	function splitString(str)
+	{
+		if (!str)
+			return [];
+		return str.split(/[,\s;]+/);
 	}
 
 	function updatePage()
 	{
 		Options.loadConfig({
-			complete: (conf) => {
+			complete: function(conf) {
 				Options.update();
 				Config.buildPage(conf);
-				Config.showSection(ExtensionManager.id, true);
+				Config.showSection(ExtensionManager.id, false);
 			},
 			configError: Config.loadConfigError,
 			serverTemplateError: Config.loadServerTemplateError,
@@ -3467,31 +3503,68 @@ var ExtensionManager = (new function($)
 
 	function deleteGlobalSettings(extName)
 	{
-		const values = Config.config().values;
-		values.forEach((value, i) =>
+		var values = Config.config().values;
+		values.forEach(function(value, i)
 		{
-			if (value.Name == "Extensions" || 
-				value.Name == "ScriptOrder" ||
+			if (value.Name == extensionsId || 
+				value.Name == scriptOrderId ||
 				value.Name.match(/(Feed)\d+.Extensions/i) ||
 				value.Name.match(/(Category)\d+.Extensions/i))
 			{
-				values[i].Value = value.Value.split(", ").filter((name) => name !== extName).join(", ");
+				values[i].Value = deleteExtFromPropVal(values[i].Value, extName);
 			}
+		});
+	}
+
+	function deleteExtFromPropVal(propVal, extName)
+	{
+		return splitString(propVal).filter(function(name) { return name !== extName; }).join(", ");
+	}
+
+	function sortExtensionsByOrder(extensions, order)
+	{
+		if (!order)
+		{
+			extensions.sort(function(a, b) { return a.name - b.name; });
+			return;
+		}
+
+		extensions.sort(function(a, b) {
+			var idxA = order.indexOf(a.name);
+			var idxB = order.indexOf(b.name);
+		  
+			if (idxA === -1) 
+			{
+				return 1;
+			}
+
+			if (idxB === -1) 
+			{
+				return -1;
+			}
+		  
+			return idxA - idxB;
 		});
 	}
 
 	function showErrorBanner(title, message)
 	{
-		const banner = $('#ExtensionsErrorAlert');
+		var banner = $('#ExtensionsErrorAlert');
 		$('#ExtensionsErrorAlert-title').text(title);
 		$('#ExtensionsErrorAlert-text').html(message);
 		banner
 			.show()
 			.off('click')
-			.on('click', () => {
-			console.log('click')
-			banner.hide();
-		});
+			.on('click', function() { banner.hide(); });
+	}
+
+	function disableAllBtns(ext, disable)
+	{
+		disableDeleteBtn(ext, disable);
+		disableUpdateBtn(ext, disable);
+		disableDeleteBtn(ext, disable);
+		disableConfigureBtn(ext, disable);
+		disableActivateBtn(ext, disable);
 	}
 
 	function disableDeleteBtn(ext, disabled)
@@ -3507,6 +3580,21 @@ var ExtensionManager = (new function($)
 	function disableUpdateBtn(ext, disabled)
 	{
 		$('#UpdateBtn_' + ext.name).prop({ disabled });
+	}
+
+	function disableConfigureBtn(ext, disabled)
+	{
+		$('#ConfigureBtn_' + ext.name).prop({ disabled });
+	}
+
+	function disableActivateBtn(ext, disabled)
+	{
+		$('#ActivateBtn_' + ext.name).prop({ disabled });
+	}
+
+	function showHelpBlock()
+	{
+		$('#ExtensionsHelpBlock').show();
 	}
 
 	function showLoadingBanner()
@@ -3526,67 +3614,345 @@ var ExtensionManager = (new function($)
 
 	function deleteSettings(extName)
 	{
-		const values = Config.config().values;
-		values.forEach((value, i) =>
+		var values = Config.config().values;
+		values.forEach(function(value, i) {
 		{
 			if (value.Name.startsWith(extName + ":"))
 			{
 				values[i] = null;
 			}
-		});
+		}});
 		Config.config().values = values.filter(Boolean);
 	}
 
-	function getActionBtns(ext)
+	function activateExt(ext)
 	{
-		if (ext.installed && ext.outdated)
+		disableAllBtns(ext, true);
+		ext.isActive = !ext.isActive;
+		var value = Config.getOptionValue(Config.findOptionByName(extensionsId));
+		if (!ext.isActive)
 		{
-			return getUpdateBtn(ext).append(getDeleteBtn(ext));
+			value = deleteExtFromPropVal(value, ext.name);
+			Config.setOptionValue(Config.findOptionByName(extensionsId), value);
+			update();
+			return;
 		}
 
-		if (ext.installed)
+		if (value)
 		{
-			return getDeleteBtn(ext);
+			value += ", " + ext.name
 		}
+		else
+		{
+			value = ext.name;
+		}
+		Config.setOptionValue(Config.findOptionByName(extensionsId), value);
 
-		return getDownloadBtn(ext);
+		RPC.call('testextension', [ext.entry], 
+			function(_)
+			{
+				ext.testError = '';
+				disableAllBtns(ext, false);
+				update();
+			},
+			function (_)
+			{
+				ext.testError = 'Failed to find the corresponding executor for ' + ext.entry + '.\nThe extension may not work';
+				disableAllBtns(ext, false);
+				update();
+			}
+		);
+	}
+
+	function getActionBtnsCell(ext)
+	{
+		var cell = $('<td class="extension-manager__td btn-toolbar"></td>');
+		if (!ext.installed)
+		{
+			return cell.append(getDownloadBtn(ext));
+		}
+		return cell
+			.append(getUpdateBtn(ext))
+			.append(getConfigureBtn(ext))
+			.append(getActivateBtn(ext))
+			.append(getDeleteBtn(ext));
 	}
 
 	function getDeleteBtn(ext)
 	{
-		const container = $('<div class="flex-row"></div>')
-		const btn = $('<button type="button" class="btn btn-danger" id="DeleteBtn_' + ext.name +'" title="Delete"><i class="icon-trash-white"></i></button>')
+		var btn = $('<button type="button" data-toggle="dropdown" class="btn btn-danger dropdown-toggle" id="DeleteBtn_' + ext.name +'" title="Delete"><i class="icon-trash-white"></i></button>')
 			.off('click')
-			.on('click', () => ExtensionManager.deleteExtension(ext));
-		const label = $('<label class="checkbox">Delete configuration options</label>')
-			.off('click')
-			.on('click', () => ext.deleteConfToggle());
-		const checkbox = $('<input type="checkbox"/>').prop('checked', ext.deleteConf)
-		label.append(checkbox);
-		container
-		 	.append(btn)
-		 	.append(label);
-		
-		return container;
+			.on('click', function() { showDeleteExtensionDropdown(ext); });
+		return btn;
 	}
 
 	function getDownloadBtn(ext)
 	{
-		const container = $('<div class="flex-row"></div>')
-		const btn = $('<button type="button" class="btn btn-primary" id="DownloadBtn_' + ext.name +'" title="Download"><img src="img/download-16.ico"></button>')
+		var btn = $('<button type="button" class="btn btn-primary btn-group" id="DownloadBtn_' + ext.name +'" title="Download"><img src="img/download-16.ico"></button>')
 			.off('click')
-			.on('click', () => ExtensionManager.downloadExtension(ext));
-		container.append(btn);
-		return container;
+			.on('click', function() { downloadExtension(ext); });
+		return btn;
 	}
 
 	function getUpdateBtn(ext)
 	{
-		const container = $('<div class="flex-row"></div>')
-		const btn = $('<button type="button" class="btn btn-info" id="UpdateBtn_' + ext.name +'" title="Update"><i class="icon-refresh"></i></button>')
+		var btn = $('<button type="button" class="btn btn-info btn-group" id="UpdateBtn_' + ext.name +'"><i class="icon-refresh"></i></button>');
+		if (ext.outdated)
+		{
+			btn.attr({ title: "Update to new version" });
+			btn.off('click').on('click', function() { updateExtension(ext); });
+		}
+		else
+		{
+			btn.attr({ disabled: true });
+			btn.attr({ title: "Extension up-to-date!" });
+			btn.addClass('btn--disabled');
+		}
+		return btn;
+	}
+
+	function getConfigureBtn(ext)
+	{
+		var btn = $('<button type="button" class="btn btn-secondary btn-group" id="ConfigureBtn_' + ext.name +'" title="Configure"><i class="icon-settings"></i></button>')
 			.off('click')
-			.on('click', () => ExtensionManager.updateExtension(ext));
-		container.append(btn);
-		return container;
+			.on('click', function() { Config.showSection(ext.id, true); });
+		return btn;
+	}
+
+	function getActivateBtn(ext)
+	{
+		var btn = $('<button type="button" class="btn btn-primary btn-group" id="ActivateBtn_' + ext.name +'"></button>')
+			.off('click')
+			.on('click', function() { activateExt(ext); });
+		if (ext.isActive && !ext.testError)
+		{	
+			btn.append('<i class="icon-pause"></i>');
+			btn.attr({ title: "Deactivate (restart needed)" });
+			btn.addClass('btn-warning');
+		}
+		else if(!ext.isActive && !ext.testError)
+		{
+			btn.append('<i class="icon-play"></i>');
+			btn.attr({ title: "Activate for new downloads (restart needed)" });
+			btn.addClass('btn-success');
+		}
+		else
+		{
+			btn.append('<img src="img/warning-16.ico">');
+			btn.attr({ title: ext.testError });
+			btn.addClass('btn-warning');
+		}
+		
+		return btn;
+	}
+
+	function getEmptyCell()
+	{
+		return $('<td class="extension-manager__td text-center"><span>-</span></td>');
+	}
+
+	function getExtActiveStatusCell(ext)
+	{
+		if (!ext.installed)
+		{
+			return getEmptyCell();
+		}
+		var cell = $('<td class="extension-manager__td"></td>');
+		var container = $('<div></div>');
+		var circle = $('<div style="margin: auto;">');
+		if (ext.isActive)
+		{	
+			circle.addClass("green-circle");
+			circle.attr({ title: "Active" });
+		}
+		else
+		{
+			circle.addClass("red-circle");
+			circle.attr({ title: "Not active" });
+		}
+		container.append(circle);
+		cell.append(container);
+		return cell;
+	}
+
+	function getHomepageCell(ext)
+	{
+		if (ext.homepage)
+		{
+			var cell = $('<td class="extension-manager__td text-center">');
+			cell.append($('<a href="' + ext.homepage + '" target="_blank"><img src="img/house-16.ico"></a>'));
+			return cell;
+		}
+		
+		return getEmptyCell();
+	}
+
+	function getCeneteredTextCell(text)
+	{
+		if (text)
+		{
+			var cell = $('<td class="extension-manager__td text-center">');
+			cell.append(text);
+			return cell;
+		}
+		
+		return getEmptyCell();
+	}
+
+	function getTextCell(text)
+	{
+		if (text)
+		{
+			var cell = $('<td class="extension-manager__td">');
+			cell.append(text);
+			return cell;
+		}
+		
+		return getEmptyCell();
+	}
+
+	function getSortExtensionsBtnsCell(ext, isFirst, isLast)
+	{
+		if (!ext.installed)
+		{
+			return getEmptyCell();
+		}
+		var cell = $('<td class="extension-manager__td text-center">');
+		var container = $('<div class="btn-row-order-block">');
+		var title = "Modify execution order (restart needed)";
+		var mvTop = $('<div class="btn-row-order icon-top"></div>')
+			.off('click')
+			.on('click', function() { moveTop(ext); });
+		var mvUp = $('<div class="btn-row-order icon-up"></div>')
+			.off('click')
+			.on('click', function() { moveUp(ext); });
+		var mvDown = $('<div class="btn-row-order icon-down"></div>')
+			.off('click')
+			.on('click', function() { moveDown(ext); });
+		var mvBottom = $('<div class="btn-row-order icon-bottom"></div>')
+			.off('click')
+			.on('click', function() { moveBottom(ext); });
+		
+		mvTop.attr({ title: title});
+		mvUp.attr({ title: title});
+		mvDown.attr({ title: title});
+		mvBottom.attr({ title: title});
+
+		if (isFirst)
+		{
+			mvTop.addClass('mv-item-arrow-btn--disabled').off('click');
+			mvUp.addClass('mv-item-arrow-btn--disabled').off('click');
+		}
+
+		if (isLast)
+		{
+			mvDown.addClass('mv-item-arrow-btn--disabled').off('click');
+			mvBottom.addClass('mv-item-arrow-btn--disabled').off('click');
+		}
+
+		container.append(mvTop).append(mvUp).append(mvDown).append(mvBottom);
+		cell.append(container);
+		return cell;
+	}
+
+	function getCurrentInstalledExtsOrder()
+	{
+		var value = Config.getOptionValue(Config.findOptionByName(scriptOrderId));
+		if (value)
+		{
+			var order = splitString(value);
+			installedExtensions.forEach(function(ext) {
+				if (order.indexOf(ext.name) == -1)
+				{
+					order.push(ext.name);
+				}
+			});
+			return order;
+		}
+		var order = installedExtensions.map(function(ext) { return ext.name; });
+		return order;
+	}
+
+	function moveTop(ext)
+	{
+		var oldOrder = getCurrentInstalledExtsOrder();
+		var newOrder = [ext.name];
+		oldOrder.forEach(function(name) {
+			if (name !== ext.name)
+			{
+				newOrder.push(name);
+			}
+		});
+		Config.setOptionValue(Config.findOptionByName(scriptOrderId), newOrder.join(", "));
+		sortExtensions();
+		update();
+	}
+
+	function moveUp(ext)
+	{
+		var oldOrder = getCurrentInstalledExtsOrder();
+		var newOrder = [];
+		oldOrder.forEach(function(name, i) {
+			if (name === ext.name)
+			{
+				newOrder[i] = newOrder[i - 1];
+				newOrder[i - 1] = ext.name;
+			}
+			else
+			{
+				newOrder.push(name);
+			}
+		});
+		Config.setOptionValue(Config.findOptionByName(scriptOrderId), newOrder.join(", "));
+		sortExtensions();
+		update();
+	}
+
+	function moveDown(ext)
+	{
+		var oldOrder = getCurrentInstalledExtsOrder();
+		var newOrder = [];
+		var prev = '';
+		oldOrder.forEach(function(name, i) {
+			if (ext.name === prev)
+			{
+				newOrder[i - 1] = name;
+				prev = '';
+				newOrder.push(ext.name);
+			}
+			else
+			{
+				prev = name;
+				newOrder.push(name);
+			}
+		});
+		Config.setOptionValue(Config.findOptionByName(scriptOrderId), newOrder.join(", "));
+		sortExtensions();
+		update();
+	}
+
+	function moveBottom(ext)
+	{
+		var oldOrder = getCurrentInstalledExtsOrder();
+		var newOrder = [];
+		oldOrder.forEach(function(name) {
+			if (name !== ext.name)
+			{
+				newOrder.push(name);
+			}
+		});
+		newOrder.push(ext.name);
+		Config.setOptionValue(Config.findOptionByName(scriptOrderId), newOrder.join(", "));
+		sortExtensions();
+		update();
+	}
+
+	function sortExtensions()
+	{
+		var order = Config.getOptionValue(Config.findOptionByName(scriptOrderId));
+		if (order)
+		{
+			sortExtensionsByOrder(installedExtensions, splitString(order));
+		}
 	}
 }(jQuery))

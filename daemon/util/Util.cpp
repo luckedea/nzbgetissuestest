@@ -111,6 +111,102 @@ void Util::Init()
 	CurrentTicks();
 }
 
+boost::optional<std::string> 
+Util::FindExecutorProgram(const std::string& filename, const std::string& customPath)
+{
+	size_t idx = filename.find_last_of(".");
+	if (idx == std::string::npos)
+	{
+		return filename;
+	}
+
+	const std::string fileExt = filename.substr(idx);
+
+	Tokenizer tok(customPath.c_str(), ",;");
+	while (char* shellover = tok.Next())
+	{
+		char* shellcmd = strchr(shellover, '=');
+		if (shellcmd)
+		{
+			*shellcmd = '\0';
+			shellcmd++;
+
+			if (fileExt == shellover)
+			{
+				return std::string(shellcmd);
+			}
+		}
+	}
+
+	#ifdef _WIN32
+    	const std::string nullOutput = " > nul 2>&1";
+	#else
+		const std::string nullOutput = " > /dev/null 2>&1";
+	#endif
+
+	if (fileExt == ".py")
+	{
+		std::string cmd = "python3 --version" + nullOutput;
+		if (std::system(cmd.c_str()) == 0)
+		{
+			return std::string("python3");
+		}
+		cmd = "python --version" + nullOutput;
+		if (std::system(cmd.c_str()) == 0)
+		{
+			return std::string("python");
+		}
+		cmd = "py --version" + nullOutput;
+		if (std::system(cmd.c_str()) == 0)
+		{
+			return std::string("py");
+		}
+		return boost::none;
+	}
+
+	if (fileExt == ".sh")
+	{
+		std::string cmd = "bash --version" + nullOutput;
+		if (std::system(cmd.c_str()) == 0)
+		{
+			return std::string("bash");
+		}
+		cmd = "sh --version" + nullOutput;
+		if (std::system(cmd.c_str()) == 0)
+		{
+			return std::string("sh");
+		}
+		return boost::none;
+	}
+
+	if (fileExt == ".js")
+	{
+		const std::string cmd = "node --version" + nullOutput;
+		if (std::system(cmd.c_str()) == 0)
+		{
+			return std::string("node");
+		}
+		return boost::none;
+	}
+
+	if (fileExt == ".cmd" || fileExt == ".bat")
+	{
+		const std::string cmd = "cmd.exe /c" + nullOutput;
+		if (std::system(cmd.c_str()) == 0)
+		{
+			return filename;
+		}
+		return boost::none;
+	}
+
+	if (fileExt == ".exe")
+	{
+		return filename;
+	}
+
+	return filename;
+}
+ 
 int64 Util::JoinInt64(uint32 Hi, uint32 Lo)
 {
 	return (((int64)Hi) << 32) + Lo;
@@ -367,15 +463,6 @@ std::vector<CString> Util::SplitCommandLine(const char* commandLine)
 	return result;
 }
 
-bool Util::IsNumber(const std::string& str) {
-	for (char c : str) {
-		if (!std::isdigit(c)) {
-			return false;
-		}
-	}
-	return true;
-}
-
 void Util::TrimRight(char* str)
 {
 	char* end = str + strlen(str) - 1;
@@ -388,7 +475,6 @@ void Util::TrimRight(char* str)
 
 void Util::TrimRight(std::string& str)
 {
-
 	while (
 		!str.empty() &&
 		(str.back() == '\n' || str.back() == '\r' || str.back() == ' ' || str.back() == '\t'))

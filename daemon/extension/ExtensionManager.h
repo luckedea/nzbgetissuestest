@@ -21,7 +21,9 @@
 #define EXTENSION_MANAGER_H
 
 #include <vector>
-#include <tuple>
+#include <utility>
+#include <memory>
+#include <shared_mutex>
 #include <boost/optional.hpp>
 #include "WebDownloader.h"
 #include "Options.h"
@@ -29,20 +31,19 @@
 
 namespace ExtensionManager
 {
-	using Extension = Extension::Script;
-	using Extensions = std::vector<Extension>;
+	using Extensions = std::vector<std::shared_ptr<Extension::Script>>;
 
 	class Manager
 	{
 	public:
-		Manager() noexcept;
+		Manager() noexcept = default;
 		~Manager() noexcept = default;
 
 		Manager(const Manager&) = delete;
 		Manager& operator=(const Manager&) = delete;
 
-		Manager(Manager&&) noexcept = default;
-		Manager& operator=(Manager&&) noexcept = default;
+		Manager(Manager&&) noexcept = delete;
+		Manager& operator=(Manager&&) noexcept = delete;
 
 		boost::optional<std::string> 
 		InstallExtension(const std::string& filename, const std::string& dest);
@@ -53,9 +54,10 @@ namespace ExtensionManager
 		boost::optional<std::string>
 		DeleteExtension(const std::string& name);
 
-		bool LoadExtensions(const IOptions& options);
+		boost::optional<std::string>
+		LoadExtensions(const IOptions& options);
 
-		std::tuple<WebDownloader::EStatus, std::string>
+		std::pair<WebDownloader::EStatus, std::string>
 		DownloadExtension(const std::string& url, const std::string& info);
 		
 		const Extensions& GetExtensions() const;
@@ -65,10 +67,13 @@ namespace ExtensionManager
 		void CreateTasks() const;
 		Extensions::const_iterator GetByName(const std::string& name) const;
 		bool Exists(const std::string& name) const;
-		void Sort(const std::vector<std::string>& order);
+		void Sort(const char* order);
 		std::string GetExtensionName(const std::string& fileName) const;
+		boost::optional<std::string>
+		DeleteExtension(const Extension::Script& ext);
 
 		Extensions m_extensions;
+		mutable std::shared_timed_mutex m_write;
 	};
 }
 

@@ -29,17 +29,13 @@
 
 namespace ExtensionManager
 {
-	Manager::Manager() noexcept
-	{
-		m_extensions.reserve(4);
-	}
-
 	const Extensions& Manager::GetExtensions() const
 	{
+		std::shared_lock<std::shared_timed_mutex> lock(m_write);
 		return m_extensions;
 	}
 
-	std::tuple<WebDownloader::EStatus, std::string>
+	std::pair<WebDownloader::EStatus, std::string>
 	Manager::DownloadExtension(const std::string& url, const std::string& info)
 	{
 		BString<1024> tempFileName;
@@ -61,21 +57,26 @@ namespace ExtensionManager
 		WebDownloader::EStatus status = downloader->DownloadWithRedirects(5);
 		downloader.reset();
 
-		return std::tuple<WebDownloader::EStatus, std::string>(status, tempFileName.Str());
+		return std::pair<WebDownloader::EStatus, std::string>(status, tempFileName.Str());
 	}
 
 	boost::optional<std::string>
 	Manager::UpdateExtension(const std::string& filename, const std::string& extName)
 	{
+		std::unique_lock<std::shared_timed_mutex> lock(m_write);
+
 		auto extensionIt = GetByName(extName);
 		if (extensionIt == std::end(m_extensions))
 		{
 			return "Failed to find " + extName;
 		}
 
-		const std::string& rootDir = extensionIt->GetRootDir();
+		if (extensionIt->use_count() > 1)
+		{
+			return "Failed to update: " + filename + " is executing";
+		}
 
-		const auto deleteExtError = DeleteExtension(extName);
+		const auto deleteExtError = DeleteExtension(*(*extensionIt));
 		if (deleteExtError)
 		{
 			if (!FileSystem::DeleteFile(filename.c_str()))
@@ -86,18 +87,25 @@ namespace ExtensionManager
 			return deleteExtError;
 		}
 		
-		const auto installExtError = InstallExtension(filename, rootDir);
+		const auto installExtError = InstallExtension(filename, (*extensionIt)->GetRootDir());
 		if (installExtError)
 		{
 			return installExtError;
 		}
 
+		m_extensions.erase(extensionIt);
 		return boost::none;
 	}
 
 	boost::optional<std::string> 
 	Manager::InstallExtension(const std::string& filename, const std::string& dest)
 	{
+		if (Util::EmptyStr(g_Options->GetSevenZipCmd()))
+		{
+
+			return std::string("\"SevenZipCmd\" is not specified");
+		}
+
 		UnpackController unpacker;
 		std::string outputDir = "-o" + dest;
 		UnpackController::ArgList args = {
@@ -132,18 +140,58 @@ namespace ExtensionManager
 	boost::optional<std::string>
 	Manager::DeleteExtension(const std::string& name)
 	{
+		std::unique_lock<std::shared_timed_mutex> lock(m_write);
+
 		auto extensionIt = GetByName(name);
 		if (extensionIt == std::end(m_extensions))
 		{
 			return "Failed to find " + name;
 		}
 
-		if (extensionIt->Busy())
+		if (extensionIt->use_count() > 1)
 		{
-			return name + " is executing";
+			return "Failed to delete: " + name + " is executing";
 		}
 
-		const char* location = extensionIt->GetLocation();
+		const auto err = DeleteExtension(*(*extensionIt));
+		if (err)
+		{
+			return err;
+		}
+
+		m_extensions.erase(extensionIt);
+		return boost::none;
+	}
+	
+	boost::optional<std::string>
+	Manager::LoadExtensions(const IOptions& options)
+	{
+		if (Util::EmptyStr(options.GetScriptDir()))
+		{
+			return std::string("\"ScriptDir\" is not specified");
+		}
+
+		std::unique_lock<std::shared_timed_mutex> lock(m_write);
+
+		m_extensions.clear();
+
+		Tokenizer tokDir(options.GetScriptDir(), ",;");
+		while (const char* extensionDir = tokDir.Next())
+		{
+			LoadExtensionDir(extensionDir, false, extensionDir);
+		}
+
+		Sort(options.GetScriptOrder());
+		CreateTasks();
+		m_extensions.shrink_to_fit();
+
+		return boost::none;
+	}
+
+	boost::optional<std::string>
+	Manager::DeleteExtension(const Extension::Script& ext)
+	{
+		const char* location = ext.GetLocation();
 
 		CString err;
 		if (FileSystem::DirectoryExists(location) && FileSystem::DeleteDirectoryWithContent(location, err))
@@ -153,54 +201,24 @@ namespace ExtensionManager
 				return boost::optional<std::string>(err.Str());
 			}
 
-			m_extensions.erase(extensionIt);
 			return boost::none;
 		}
 		else if (FileSystem::FileExists(location) && FileSystem::DeleteFile(location))
 		{
-			m_extensions.erase(extensionIt);
 			return boost::none;
 		}
 
 		return std::string("Failed to delete ") + location;
 	}
-
-	bool Manager::LoadExtensions(const IOptions& options)
-	{
-		if (Util::EmptyStr(options.GetScriptDir()))
-		{
-			return false;
-		}
-
-		Tokenizer tokDir(options.GetScriptDir(), ",;");
-		while (const char* extensionDir = tokDir.Next())
-		{
-			LoadExtensionDir(extensionDir, false, extensionDir);
-		}
-
-		// first add all scripts from Extension Order
-		std::vector<std::string> extensionOrder;
-		Tokenizer tokOrder(options.GetScriptOrder(), ",;");
-		while (const char* extensionName = tokOrder.Next())
-		{
-			extensionOrder.push_back(std::string(extensionName));
-		}
-
-		Sort(extensionOrder);
-		CreateTasks();
-		m_extensions.shrink_to_fit();
-
-		return true;
-	}
-
+	
 	void Manager::LoadExtensionDir(const char* directory, bool isSubDir, const char* rootDir)
 	{
-		Extension extension;
+		Extension::Script extension;
 
 		if (ExtensionLoader::V2::Load(extension, directory, rootDir)) {
 			if (!Exists(extension.GetName()))
 			{
-				m_extensions.push_back(std::move(extension));
+				m_extensions.emplace_back(std::make_shared<Extension::Script>(std::move(extension)));
 				return;
 			}
 		}
@@ -225,7 +243,7 @@ namespace ExtensionManager
 				extension.SetName(std::move(name));
 				if (ExtensionLoader::V1::Load(extension, location, rootDir))
 				{
-					m_extensions.push_back(std::move(extension));
+					m_extensions.emplace_back(std::make_shared<Extension::Script>(std::move(extension)));
 				}
 			}
 			else if (!isSubDir)
@@ -237,23 +255,23 @@ namespace ExtensionManager
 
 	void Manager::CreateTasks() const
 	{
-		for (const Extension& extension : m_extensions)
+		for (const auto extension : m_extensions)
 		{
-			if (!extension.GetSchedulerScript() || Util::EmptyStr(extension.GetTaskTime()))
+			if (!extension->GetSchedulerScript() || Util::EmptyStr(extension->GetTaskTime()))
 			{
 				continue;
 			}
 			Tokenizer tok(g_Options->GetExtensions(), ",;");
 			while (const char* scriptName = tok.Next())
 			{
-				if (strcmp(scriptName, extension.GetName()) == 0)
+				if (strcmp(scriptName, extension->GetName()) == 0)
 				{
 					g_Options->CreateSchedulerTask(
 						0,
-						extension.GetTaskTime(),
+						extension->GetTaskTime(),
 						nullptr,
 						Options::scScript,
-						extension.GetName()
+						extension->GetName()
 					);
 					break;
 				}
@@ -266,12 +284,39 @@ namespace ExtensionManager
 		return GetByName(name) != std::end(m_extensions);
 	}
 
-	void Manager::Sort(const std::vector<std::string>& order)
+	void Manager::Sort(const char* orderStr)
 	{
-		auto comparator = [](const Extension& a, const Extension& b) -> bool
+		auto comparator = [](const auto& a, const auto& b) -> bool
+		{
+			return strcmp(a->GetName(), b->GetName()) < 0;
+		};
+
+		if (Util::EmptyStr(orderStr))
+		{
+			std::sort(
+				std::begin(m_extensions),
+				std::end(m_extensions),
+				comparator
+			);
+			return;	
+		}
+
+		std::vector<std::string> order;
+		Tokenizer tokOrder(orderStr, ",;");
+		while (const char* extName = tokOrder.Next())
+		{	
+			auto pos = std::find(
+				std::begin(order), 
+				std::end(order), 
+				extName
+			);
+
+			if (pos == std::end(order))
 			{
-				return strcmp(a.GetName(), b.GetName()) < 0;
-			};
+				order.push_back(extName);
+			}
+		}
+
 		if (order.empty())
 		{
 			std::sort(
@@ -289,9 +334,9 @@ namespace ExtensionManager
 			auto it = std::find_if(
 				std::begin(m_extensions),
 				std::end(m_extensions),
-				[&name](const Extension& ext)
+				[&name](const auto& ext)
 				{
-					return name == ext.GetName();
+					return name == ext->GetName();
 				}
 			);
 			if (it != std::end(m_extensions))
@@ -324,9 +369,9 @@ namespace ExtensionManager
 		return std::find_if(
 			std::begin(m_extensions),
 			std::end(m_extensions),
-			[&name](const Extension& ext)
+			[&name](const auto& ext)
 			{
-				return ext.GetName() == name;
+				return ext->GetName() == name;
 			}
 		);
 	}
