@@ -54,7 +54,7 @@ Synology packages are available as SynoCommunity packages and SPK packages. [Syn
 
 ## Building from sources
 
-[General instructions](doc/INSTALLATION.md)
+[General instructions](docs/INSTALLATION.md)
 
 [Linux cross-compiling / buildroot](linux/build-info.md)
 
@@ -63,17 +63,14 @@ Synology packages are available as SynoCommunity packages and SPK packages. [Syn
 [Synology](synology/build-info.md)
 
 ## Extensions
-[About](doc/EXTENSIONS.md)
 
-[Writing extension (v23 and above)](doc/EXTENSIONS.md)
-
-[Writing extension-legacy (v22 and bellow)](doc/EXTENSIONS-LEGACY.md)
+[General instructions](docs/EXTENSIONS.md)
 
 ## Contribution
 
 Contributions are very welcome - not only from developers, but from our users too - please don't hesitate to participate in [discussions](https://github.com/nzbgetcom/nzbget/discussions) or [create a new discussion](https://github.com/nzbgetcom/nzbget/discussions/new/choose) 
 
-For more information - see [Contributing](doc/CONTRIBUTING.md).
+For more information - see [Contributing](docs/CONTRIBUTING.md).
 
 ## Donate
 
